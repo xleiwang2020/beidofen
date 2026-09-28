@@ -1,0 +1,68 @@
+KET word list build report
+============================================================
+headwords with an exact dictionary gloss : 1180
+headwords patched from zh_overrides.json: 203
+glosses guessed by phrase search        : 25
+headwords still without a gloss        : 0
+total words in data/words.json         : 1370
+dictionary used                        : /System/Library/AssetsV2/com_apple_MobileAsset_DictionaryServices_dictionary3macOS/93198f6ae0a53c70c903be9261f2f3784d3e9407.asset/AssetData/Simplified Chinese - English.dictionary
+
+-- REVIEW: multi-word entries -------------------------------
+   close to                     几乎要做
+   fill in                      补好龋洞
+   for sale                     供出售
+   get off                      你要在下一站下车
+   get on                       到车站
+   get up                       加速
+   go out                       出发
+   grow up                      儿时在伦敦度过
+   have to                      你不必这么早离开
+   instead of                   而不是
+   listen to                    请听
+   look after                   保重
+   look at                      瞧瞧这一堆乱摊子
+   look for                     男装的款式
+   look out                     当心
+   next to                      下一位发言的是詹妮
+   piece of cake                一片蛋糕
+   put on                       信任
+   sit down                     坐下
+   take off                     我的话你别见怪
+   tidy up                      整理
+   try on                       尽最大努力做
+   turn off                     我们在什么地方换道去德比
+   turn on                      突然攻击
+   wake up                      早上你通常几点醒
+
+-- MISSING: add these to data/zh_overrides.json -------------
+
+-- topic list entries kept out of the word list ------------
+   Time                               January - December
+   Time                               Monday - Sunday
+
+-- topic lists ---------------------------------------------
+   Appliances                                           24
+   Clothes and Accessories                              32
+   Colours                                              12
+   Communication and Technology                         32
+   Documents and Texts                                  22
+   Education                                            44
+   Entertainment and Media                              71
+   Family and Friends                                   39
+   Food and Drink                                       91
+   Health, Medicine and Exercise                        59
+   Hobbies and Leisure                                  34
+   House and Home                                       52
+   Measurements                                         18
+   Personal Feelings, Opinions and Experiences (adjectives) 72
+   Places: Buildings                                    37
+   Places: Countryside                                  19
+   Places: Town and City                                22
+   Services                                             17
+   Shopping                                             35
+   Sport                                                64
+   The Natural World                                    37
+   Time                                                 44
+   Travel and Transport                                 87
+   Weather                                              18
+   Work and Jobs                                        66

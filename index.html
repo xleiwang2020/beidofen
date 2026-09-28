@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1020">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>单词星球 · KET 背单词</title>
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div id="boot" class="boot">
+  <div class="boot-inner">
+    <div class="boot-rocket">🚀</div>
+    <h1>单词星球</h1>
+    <p id="boot-msg">正在加载 KET 词汇表…</p>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header class="topbar">
+    <div class="topbar-left">
+      <span class="logo">🚀 单词星球</span>
+      <span class="chip" id="chip-level">Lv.1</span>
+      <span class="chip" id="chip-streak">🔥 0 天</span>
+    </div>
+    <div class="topbar-right">
+      <span class="chip ghost" id="chip-exam">距考试 — 天</span>
+      <button class="icon-btn" id="btn-sound" title="音效开关">🔊</button>
+    </div>
+  </header>
+
+  <main id="screens">
+    <!-- ---------------------------------------------------------- 今日任务 -->
+    <section class="screen" data-screen="today" id="screen-today">
+      <div class="grid-2">
+        <div class="card hero">
+          <div class="hero-top">
+            <div>
+              <h2 id="today-greeting">今天的任务</h2>
+              <p class="muted" id="today-summary">…</p>
+            </div>
+            <div class="pet">
+              <div class="pet-body" id="pet-body"></div>
+              <div class="pet-name" id="pet-name">小火箭</div>
+            </div>
+          </div>
+          <div class="ring-row">
+            <div class="ring">
+              <svg viewBox="0 0 120 120" aria-hidden="true">
+                <circle class="ring-bg" cx="60" cy="60" r="52"></circle>
+                <circle class="ring-fg" id="ring-fg" cx="60" cy="60" r="52"></circle>
+              </svg>
+              <div class="ring-text">
+                <strong id="ring-num">0</strong>
+                <span id="ring-sub">/ 0</span>
+              </div>
+            </div>
+            <div class="hero-stats">
+              <div class="stat"><b id="s-new">0</b><span>今日新学</span></div>
+              <div class="stat"><b id="s-review">0</b><span>今日复习</span></div>
+              <div class="stat"><b id="s-acc">—</b><span>正确率</span></div>
+              <div class="stat"><b id="s-covered">0%</b><span>3 遍覆盖</span></div>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-xl" id="btn-start">开始今天的学习</button>
+          <p class="hint" id="today-hint"></p>
+        </div>
+
+        <div class="card">
+          <h3>今日任务清单</h3>
+          <ul class="quests" id="quests"></ul>
+          <h3>最近 14 天</h3>
+          <div class="bars" id="bars"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------------ 学习会话 -->
+    <section class="screen" data-screen="study" id="screen-study" hidden>
+      <div class="study-head">
+        <button class="icon-btn" id="btn-quit" title="退出">✕</button>
+        <div class="progress"><div class="progress-fg" id="session-bar"></div></div>
+        <span class="chip" id="session-combo">连对 0</span>
+        <span class="chip gold" id="session-xp">+0 XP</span>
+      </div>
+      <div class="card study-card" id="study-card"></div>
+      <div class="study-foot">
+        <span class="kbd-hint" id="kbd-hint">提示：按 1–4 选答案，回车继续</span>
+      </div>
+    </section>
+    <!-- ------------------------------------------------------------ 星球图 -->
+    <section class="screen" data-screen="planets" id="screen-planets" hidden>
+      <div class="card">
+        <h2>单词星球图</h2>
+        <p class="muted">每个星球 = 一个主题。星球里的单词全部学满 3 遍，星球就被点亮 ✨</p>
+        <div class="units" id="units"></div>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------------ 单词库 -->
+    <section class="screen" data-screen="words" id="screen-words" hidden>
+      <div class="card">
+        <div class="filter-row">
+          <input type="search" id="search" placeholder="搜索英文或中文…" autocomplete="off">
+          <select id="filter-topic"></select>
+          <select id="filter-state">
+            <option value="all">全部状态</option>
+            <option value="new">还没学过</option>
+            <option value="learning">正在学</option>
+            <option value="covered">已学满 3 遍</option>
+            <option value="mastered">很熟了</option>
+            <option value="wrong">错词本</option>
+          </select>
+        </div>
+        <p class="muted small" id="words-count"></p>
+        <div class="word-list" id="word-list"></div>
+        <button class="btn btn-ghost" id="btn-more" hidden>加载更多</button>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------- 报告 + 设置 -->
+    <section class="screen" data-screen="report" id="screen-report" hidden>
+      <div class="grid-2">
+        <div class="card">
+          <h2>学习报告</h2>
+          <div class="report-stats" id="report-stats"></div>
+          <h3>需要重点复习的单词</h3>
+          <div class="word-list small" id="hard-words"></div>
+        </div>
+        <div class="card">
+          <h2>设置</h2>
+          <label class="field">考试日期
+            <input type="date" id="set-exam">
+          </label>
+          <label class="field">每天最多学多少词（0 = 自动）
+            <input type="number" id="set-limit" min="0" max="300" step="5">
+          </label>
+          <label class="field check">音效 <input type="checkbox" id="set-sfx"></label>
+          <label class="field check">朗读单词（用浏览器语音）<input type="checkbox" id="set-tts"></label>
+          <div class="btn-row">
+            <button class="btn btn-ghost" id="btn-export">导出进度</button>
+            <button class="btn btn-ghost" id="btn-import">导入进度</button>
+            <button class="btn btn-ghost" id="btn-print">打印错词本</button>
+            <button class="btn btn-danger" id="btn-reset">清空进度</button>
+          </div>
+          <input type="file" id="file-import" accept="application/json" hidden>
+          <p class="hint" id="save-hint">进度自动保存在这台设备的浏览器里。</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+  <nav class="tabbar" id="tabbar">
+    <button data-go="today" class="tab active"><span>🏠</span>今日</button>
+    <button data-go="planets" class="tab"><span>🪐</span>星球</button>
+    <button data-go="words" class="tab"><span>📚</span>单词库</button>
+    <button data-go="report" class="tab"><span>📈</span>报告</button>
+  </nav>
+
+</div>
+
+<div class="toast-wrap" id="toasts"></div>
+<div class="overlay" id="overlay" hidden></div>
+<canvas id="fx" hidden></canvas>
+
+<script src="data/words.js"></script>
+<script src="js/store.js"></script>
+<script src="js/srs.js"></script>
+<script src="js/speech.js"></script>
+<script src="js/exercises.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
