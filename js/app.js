@@ -810,12 +810,18 @@
   function boot() {
     initElements();
 
-    if (!window.KET_WORDS || !window.KET_WORDS.length) {
+    // 兼容对象结构 { meta: {...}, words: [...] } 或直接数组
+    let raw = window.KET_WORDS;
+    if (raw && Array.isArray(raw.words)) {
+      raw = raw.words;
+    }
+
+    if (!Array.isArray(raw) || !raw.length) {
       el.bootMsg.textContent = '错误：未能加载 data/words.js 数据集。';
       return;
     }
 
-    allWords = window.KET_WORDS;
+    allWords = raw;
     store = new window.Store();
     srs = new window.SRSEngine(store, allWords);
     exGen = new window.ExerciseGenerator(allWords);
