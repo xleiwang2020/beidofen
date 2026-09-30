@@ -17,6 +17,7 @@
       version: 1,
       createdAt: todayStr(),
       examDate: '2026-12-19', // 预设 2026 年 12 月 KET 考期
+      planStart: '2026-10-01', // 3 轮过词计划的起始日
       dailyLimit: 0,         // 0 = 自动计算
       soundEnabled: true,
       ttsEnabled: true,
@@ -36,10 +37,17 @@
       //   nextReview: '',       // 下次复习日期 YYYY-MM-DD
       //   lastReviewed: '',     // 上次复习日期 YYYY-MM-DD
       //   firstLearned: '',     // 首次学习日期 YYYY-MM-DD
+      //   passes: 0,            // 3 轮过词：已经过了几轮（0..3）
+      //   lastPassDate: '',     // 最近一次过轮的日期（同一天最多过 1 轮）
       // }
       words: {},
       // 错词标记（最近错且未通过复习）
-      wrongWords: {}
+      wrongWords: {},
+      // ⭐ 单词本：孩子主动收藏的「不熟悉」单词
+      // WordbookEntry: { addedAt: 'YYYY-MM-DD', passes: 0, lastPassed: '', source: 'manual' }
+      wordbook: {},
+      // 是否强制「单词本过关后才能开始今日学习」
+      wordbookGateEnabled: true
     };
   }
 
@@ -95,6 +103,72 @@
       this.save();
     }
 
+    // ------------------------------------------------------------- ⭐ 单词本
+    wordbookIds() {
+      const wb = this.data.wordbook || {};
+      return Object.keys(wb);
+    }
+
+    wordbookCount() {
+      return this.wordbookIds().length;
+    }
+
+    isInWordbook(id) {
+      return !!(this.data.wordbook && this.data.wordbook[id]);
+    }
+
+    getWordbookEntry(id) {
+      return (this.data.wordbook && this.data.wordbook[id]) || null;
+    }
+
+    // 按收藏时间返回 [{ id, entry }]
+    getWordbookEntries() {
+      const wb = this.data.wordbook || {};
+      return Object.keys(wb)
+        .map(id => ({ id: id, entry: wb[id] }))
+        .sort((a, b) => String(a.entry.addedAt).localeCompare(String(b.entry.addedAt)));
+    }
+
+    addToWordbook(id, source = 'manual') {
+      if (!this.data.wordbook) this.data.wordbook = {};
+      if (!this.data.wordbook[id]) {
+        this.data.wordbook[id] = {
+          addedAt: todayStr(),
+          passes: 0,
+          lastPassed: '',
+          source: source
+        };
+        this.save();
+      }
+      return this.data.wordbook[id];
+    }
+
+    removeFromWordbook(id) {
+      if (this.data.wordbook && this.data.wordbook[id]) {
+        delete this.data.wordbook[id];
+        this.save();
+      }
+    }
+
+    // 返回 true 表示已加入单词本，false 表示已移出
+    toggleWordbook(id, source = 'manual') {
+      if (this.isInWordbook(id)) {
+        this.removeFromWordbook(id);
+        return false;
+      }
+      this.addToWordbook(id, source);
+      return true;
+    }
+
+    markWordbookPassed(id, when = todayStr()) {
+      const entry = this.data.wordbook && this.data.wordbook[id];
+      if (!entry) return null;
+      entry.passes = (entry.passes || 0) + 1;
+      entry.lastPassed = when;
+      this.save();
+      return entry;
+    }
+
     getDailyLog(date = todayStr()) {
       if (!this.data.dailyLogs[date]) {
         this.data.dailyLogs[date] = {
@@ -102,10 +176,17 @@
           reviewCount: 0,
           correctCount: 0,
           totalCount: 0,
+          passCount: 0,
           xp: 0
         };
       }
       return this.data.dailyLogs[date];
+    }
+
+    recordPass(date = todayStr()) {
+      const log = this.getDailyLog(date);
+      log.passCount = (log.passCount || 0) + 1;
+      this.save();
     }
 
     recordAnswer({ wordId, isCorrect, isNew, xpEarned = 10 }) {

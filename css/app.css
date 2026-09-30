@@ -307,3 +307,148 @@ main { padding: clamp(.8rem, 2.5vw, 1.5rem) clamp(.8rem, 3vw, 2rem) 100px; max-w
 .modal { background: #0c1226; border: 1px solid var(--card-line); border-radius: 20px; max-width: 500px; width: 100%; padding: 1.3rem; box-shadow: var(--shadow); }
 #fx { position: fixed; inset: 0; pointer-events: none; z-index: 80; }
 
+
+/* ==================================================================== 五线格 */
+.ruled-grid { margin: .35rem 0 .2rem; }
+
+.grid-paper {
+  position: relative;
+  height: 82px;
+  padding: 0 5px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .05), rgba(255, 255, 255, .02));
+  border: 1px solid var(--card-line);
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+.grid-paper:focus-within { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(91, 140, 255, .16); }
+
+.grid-lines { position: absolute; inset: 0; pointer-events: none; }
+.grid-lines .gline {
+  position: absolute; left: 0; right: 0; height: 1px;
+  background: rgba(160, 190, 255, .20);
+}
+.grid-lines .gline.baseline { background: rgba(91, 140, 255, .65); height: 2px; }
+
+.grid-cells { position: relative; display: flex; height: 100%; }
+
+.grid-cells .cell {
+  position: relative;
+  flex: 0 0 auto;
+  height: 100%;
+  border-right: 1px dashed rgba(160, 190, 255, .16);
+}
+.grid-cells .cell.filled { background: rgba(91, 140, 255, .05); }
+
+.grid-cells .cell .glyph,
+.grid-cells .cell .ghost {
+  position: absolute; left: 0; right: 0; bottom: 25%;
+  text-align: center; line-height: 1; font-size: 42px;
+  font-family: "Chalkboard SE", "Comic Sans MS", "Bradley Hand", var(--font);
+  pointer-events: none;
+}
+.grid-cells .cell .glyph { color: var(--text); }
+.grid-cells .cell .ghost { color: rgba(61, 220, 151, .45); }
+
+.grid-cells .cell.cursor::after {
+  content: ''; position: absolute; left: 50%; bottom: 25%; width: 2px; height: 34px;
+  transform: translateX(-50%); background: var(--primary);
+  animation: caret 1s steps(1) infinite;
+}
+@keyframes caret { 0%, 50% { opacity: 1 } 50.01%, 100% { opacity: 0 } }
+
+.grid-cells .cell.ok .glyph { color: var(--ok); }
+.grid-cells .cell.bad .glyph { color: var(--danger); }
+.grid-cells .cell.bad { background: rgba(255, 107, 107, .10); }
+
+.grid-input {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  opacity: 0; border: none; background: transparent;
+  font-size: 16px; /* iOS 防止自动放大 */
+}
+.ruled-grid { position: relative; }
+
+.grid-hint { text-align: center; color: var(--muted); font-size: .86rem; margin: .55rem 0 .2rem; }
+
+/* ================================================================ 单词本按钮 */
+.star-btn { background: rgba(255, 211, 92, .10); border-color: rgba(255, 211, 92, .35); color: var(--gold); }
+.star-btn.on { background: rgba(255, 211, 92, .22); border-color: var(--gold); }
+.word-row .star-btn { font-size: .95rem; }
+.feedback .fb-actions { display: flex; gap: .5rem; flex-wrap: wrap; justify-content: flex-end; }
+.feedback { flex-wrap: wrap; }
+.feedback .fb-text { flex: 1 1 100%; min-width: 0; }
+
+/* 专项练习入口 */
+.practice-row { margin-top: .7rem; }
+.practice-row .btn { font-size: .92rem; }
+.practice-row b { color: var(--gold); }
+
+/* 按主题听写：下拉框 + 听写按钮连成一组 */
+.topic-pick { display: inline-flex; gap: .4rem; flex-wrap: wrap; align-items: stretch; max-width: 100%; }
+.topic-pick select {
+  font-family: var(--font); font-size: .9rem; color: var(--text);
+  background: rgba(0, 0, 0, .3); border: 1px solid var(--card-line);
+  border-radius: 12px; padding: .5rem .6rem; width: 12.5rem; max-width: 100%;
+  text-overflow: ellipsis;
+}
+.topic-pick select:focus { outline: none; border-color: var(--primary); }
+
+/* 五线格：预填的空格 / 符号格 */
+.grid-cells .cell.fixed .glyph { color: var(--muted); }
+.grid-cells .cell.space { border-right-style: none; }
+.grid-cells .cell.fixed.ok .glyph { color: var(--muted); }
+
+/* 答题反馈里的完整例句 */
+.feedback .fb-sent { margin-top: .35rem; font-size: .95rem; line-height: 1.5; color: var(--text); }
+.feedback .fb-sent mark { background: rgba(255, 200, 87, .22); color: var(--gold); border-radius: 4px; padding: 0 .15rem; }
+
+/* 单词本页面 */
+.wb-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+.wb-head h2 { margin-bottom: .2rem; }
+
+/* 底栏角标 */
+.tab-badge {
+  position: absolute; top: 2px; right: 6px;
+  min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 999px; background: var(--danger); color: #fff;
+  font-size: .62rem; font-style: normal; line-height: 16px; text-align: center;
+}
+.tab { position: relative; }
+
+/* ================================================================= 闯关闸门 */
+.gate {
+  position: fixed; inset: 0; z-index: 90;
+  display: grid; place-items: center; padding: 1rem;
+  background:
+    radial-gradient(900px 500px at 20% 0%, rgba(91, 140, 255, .22), transparent 60%),
+    rgba(4, 7, 16, .95);
+  backdrop-filter: blur(10px);
+  overflow-y: auto;
+}
+.gate-card {
+  width: min(720px, 100%);
+  background: #0c1226;
+  border: 1px solid var(--card-line);
+  border-radius: 22px;
+  box-shadow: var(--shadow);
+  padding: 1.2rem clamp(1rem, 3vw, 1.6rem);
+  animation: pop .22s ease;
+  max-height: 92vh;
+  display: flex; flex-direction: column;
+}
+.gate-head { display: flex; align-items: center; justify-content: space-between; gap: .8rem; }
+.gate-head h2 { margin: 0; }
+.gate-body { margin-top: .8rem; overflow-y: auto; flex: 1; }
+.gate-qnum { color: var(--muted); font-size: .78rem; }
+.gate-hero { text-align: center; display: flex; flex-direction: column; align-items: center; gap: .3rem; }
+.gate-hero .big { font-size: 2.6rem; }
+.gate-hero h2 { margin: .2rem 0; }
+.gate-list { max-height: 32vh; overflow-y: auto; margin-top: .7rem; }
+.gate-list .word-row { cursor: default; }
+.gate-foot { margin-top: .9rem; text-align: center; display: flex; flex-direction: column; align-items: center; gap: .5rem; }
+.gate-foot .btn-xl { width: 100%; }
+@media (max-width: 640px) {
+  .grid-cells .cell .glyph, .grid-cells .cell .ghost { font-size: 34px; }
+}
+

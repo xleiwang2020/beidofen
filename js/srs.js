@@ -26,6 +26,17 @@
   // Box 5: 30天
   const BOX_INTERVALS = [0, 1, 3, 7, 15, 30];
 
+  // 3 轮过词：计划起始日 → 考前 5 天，按 31 : 25 : 19 天切成 3 轮，剩下几天只刷错词
+  const ROUNDS = 3;
+  const ROUND_SHARES = [31, 25, 19];
+  const BUFFER_DAYS = 5;
+  const ROUND_NAMES = ['认识单词', '回想英文', '拼写单词'];
+  const UNTAGGED_TOPIC = 'General';
+
+  function passesOf(rec) {
+    return (rec && rec.passes) || 0;
+  }
+
   class SRSEngine {
     constructor(store, allWords) {
       this.store = store;
@@ -46,12 +57,8 @@
 
       for (const w of this.allWords) {
         const rec = this.store.getWordRecord(w.id);
-        if (!rec || rec.reps === 0) {
-          unlearned += 1;
-          underCovered += 1;
-        } else if (rec.reps < 3) {
-          underCovered += 1;
-        }
+        if (!rec || rec.reps === 0) unlearned += 1;
+        if (passesOf(rec) < ROUNDS) underCovered += 1;
       }
 
       // 如果手动指定了每天限制，优先使用
@@ -173,20 +180,150 @@
       return { record: rec, isNew };
     }
 
-    // 按主题统计进度（用于星球图）
+    // ----------------------------------------------------------- 3 轮过词
+    // 每一轮的截止日（含当天），由计划起始日和考试日期推出
+    getRoundSchedule() {
+      const start = this.store.data.planStart || '2026-10-01';
+      const examDate = this.store.data.examDate || '2026-12-19';
+      const finalDay = addDays(examDate, -BUFFER_DAYS);
+      const span = Math.max(ROUNDS, daysBetween(start, finalDay) + 1);
+      const totalShare = ROUND_SHARES.reduce((a, b) => a + b, 0);
+      let cum = 0;
+      return ROUND_SHARES.map((share, i) => {
+        cum += share;
+        return {
+          round: i + 1,
+          name: ROUND_NAMES[i],
+          deadline: addDays(start, Math.round((span * cum) / totalShare) - 1)
+        };
+      });
+    }
+
+    // 当前轮次 = 全部单词里最少过了几轮 + 1；3 轮都过完返回 ROUNDS + 1（冲刺错词）
+    getRoundPlan(today = window.todayStr()) {
+      const counts = new Array(ROUNDS + 1).fill(0); // counts[k] = 恰好过了 k 轮的词数
+      for (const w of this.allWords) {
+        counts[Math.min(ROUNDS, passesOf(this.store.getWordRecord(w.id)))] += 1;
+      }
+      let round = ROUNDS + 1;
+      for (let k = 0; k < ROUNDS; k++) {
+        if (counts[k] > 0) { round = k + 1; break; }
+      }
+
+      const total = this.allWords.length;
+      const schedule = this.getRoundSchedule();
+      const doneToday = this.store.getDailyLog(today).passCount || 0;
+      const passedPerRound = schedule.map((_, i) =>
+        counts.slice(i + 1).reduce((a, b) => a + b, 0));
+
+      if (round > ROUNDS) {
+        return { round, name: '冲刺错词', total, remaining: 0, dailyTarget: 0, doneToday, schedule, passedPerRound, behind: false, deadline: '' };
+      }
+
+      const cur = schedule[round - 1];
+      const remaining = total - passedPerRound[round - 1];
+      // 今天已经过掉的也算进今天的任务里，免得边学边涨目标
+      const remainingAtDayStart = remaining + doneToday;
+      let daysLeft = daysBetween(today, cur.deadline) + 1;
+      const behind = daysLeft <= 0;
+      if (behind) {
+        // 已经过了本轮截止日：按剩余工作量把到考前 5 天的日子重新分给本轮
+        const finalDay = schedule[ROUNDS - 1].deadline;
+        const allRemaining = passedPerRound.reduce((sum, p) => sum + (total - p), 0);
+        const daysToFinal = Math.max(1, daysBetween(today, finalDay) + 1);
+        daysLeft = Math.max(1, Math.round(daysToFinal * remaining / Math.max(1, allRemaining)));
+      }
+      const manualLimit = this.store.data.dailyLimit || 0;
+      const dailyTarget = manualLimit > 0
+        ? manualLimit
+        : Math.ceil(remainingAtDayStart / Math.max(1, daysLeft));
+
+      return {
+        round,
+        name: cur.name,
+        deadline: cur.deadline,
+        daysLeft: Math.max(1, daysLeft),
+        total,
+        remaining,
+        dailyTarget,
+        doneToday,
+        schedule,
+        passedPerRound,
+        behind
+      };
+    }
+
+    // 答对一题后调用：难度够下一轮、且今天还没过过轮，就记为过了一轮
+    recordPass(wordId, level, today = window.todayStr()) {
+      const rec = this.store.getWordRecord(wordId);
+      if (!rec) return false;
+      const next = passesOf(rec) + 1;
+      if (next > ROUNDS || level < next || rec.lastPassDate === today) return false;
+      rec.passes = next;
+      rec.lastPassDate = today;
+      this.store.setWordRecord(wordId, rec);
+      this.store.recordPass(today);
+      return true;
+    }
+
+    // 本轮还没过的词：错得多的先来，其余按词表顺序
+    getRoundQueue(round, limit) {
+      const list = [];
+      this.allWords.forEach((w, idx) => {
+        const rec = this.store.getWordRecord(w.id);
+        if (passesOf(rec) !== round - 1) return;
+        list.push({ w, idx, lapses: (rec && rec.lapses) || 0 });
+      });
+      list.sort((a, b) => (b.lapses - a.lapses) || (a.idx - b.idx));
+      return list.slice(0, limit).map(x => x.w);
+    }
+
+    // ----------------------------------------------------------- 主题
+    wordsForTopic(topic) {
+      if (topic === UNTAGGED_TOPIC) return this.allWords.filter(w => !(w.topics && w.topics.length));
+      return this.allWords.filter(w => (w.topics || []).includes(topic));
+    }
+
+    // 按主题听写：到期复习 → 学过但不牢（盒子小、错得多） → 新词，取满 limit 个后打乱
+    getTopicPracticeQueue(topic, limit = 15, today = window.todayStr()) {
+      const due = [];
+      const learned = [];
+      const fresh = [];
+      for (const w of this.wordsForTopic(topic)) {
+        const rec = this.store.getWordRecord(w.id);
+        if (!rec || rec.reps === 0) fresh.push(w);
+        else if (rec.nextReview && rec.nextReview <= today) due.push({ w, rec });
+        else learned.push({ w, rec });
+      }
+      const weakFirst = (a, b) => (a.rec.box - b.rec.box) || ((b.rec.lapses || 0) - (a.rec.lapses || 0));
+      due.sort(weakFirst);
+      learned.sort(weakFirst);
+      const picked = [...due.map(x => x.w), ...learned.map(x => x.w), ...fresh].slice(0, limit);
+      for (let i = picked.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [picked[i], picked[j]] = [picked[j], picked[i]];
+      }
+      return picked;
+    }
+
+    // 按主题统计进度（用于星球图 / 主题选择）
     getTopicStats() {
       const stats = {};
       for (const w of this.allWords) {
-        const topics = w.topics && w.topics.length ? w.topics : ['General'];
+        const topics = w.topics && w.topics.length ? w.topics : [UNTAGGED_TOPIC];
         for (const t of topics) {
           if (!stats[t]) {
-            stats[t] = { topic: t, total: 0, covered: 0, mastered: 0, words: [] };
+            stats[t] = {
+              topic: t,
+              label: t === UNTAGGED_TOPIC ? '未分类' : t,
+              total: 0, covered: 0, mastered: 0, words: []
+            };
           }
           stats[t].total += 1;
           stats[t].words.push(w);
           const rec = this.store.getWordRecord(w.id);
           if (rec) {
-            if (rec.reps >= 3) stats[t].covered += 1;
+            if (passesOf(rec) >= ROUNDS) stats[t].covered += 1;
             if (rec.box >= 4) stats[t].mastered += 1;
           }
         }
@@ -194,6 +331,9 @@
       return Object.values(stats);
     }
   }
+
+  SRSEngine.ROUNDS = ROUNDS;
+  SRSEngine.passesOf = passesOf;
 
   window.SRSEngine = SRSEngine;
 })();

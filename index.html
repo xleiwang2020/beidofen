@@ -57,13 +57,21 @@
               </div>
             </div>
             <div class="hero-stats">
-              <div class="stat"><b id="s-new">0</b><span>今日新学</span></div>
-              <div class="stat"><b id="s-review">0</b><span>今日复习</span></div>
+              <div class="stat"><b id="s-new">0</b><span>今日过词</span></div>
+              <div class="stat"><b id="s-review">0</b><span>本轮剩余</span></div>
               <div class="stat"><b id="s-acc">—</b><span>正确率</span></div>
-              <div class="stat"><b id="s-covered">0%</b><span>3 遍覆盖</span></div>
+              <div class="stat"><b id="s-covered">0%</b><span>3 轮完成</span></div>
             </div>
           </div>
           <button class="btn btn-primary btn-xl" id="btn-start">开始今天的学习</button>
+          <div class="btn-row practice-row">
+            <span class="topic-pick">
+              <select id="practice-topic" aria-label="听写主题"></select>
+              <button class="btn btn-ghost" id="btn-practice-dictation">✍️ 听音拼写（五线格）</button>
+            </span>
+            <button class="btn btn-ghost" id="btn-practice-definition">🔍 看释义猜词（五线格）</button>
+            <button class="btn btn-ghost" id="btn-practice-wordbook">⭐ 单词本闯关 <b id="practice-wb-num">0</b></button>
+          </div>
           <p class="hint" id="today-hint"></p>
         </div>
 
@@ -93,7 +101,7 @@
     <section class="screen" data-screen="planets" id="screen-planets" hidden>
       <div class="card">
         <h2>单词星球图</h2>
-        <p class="muted">每个星球 = 一个主题。星球里的单词全部学满 3 遍，星球就被点亮 ✨</p>
+        <p class="muted">每个星球 = 一个主题。星球里的单词 3 轮全部过完，星球就被点亮 ✨</p>
         <div class="units" id="units"></div>
       </div>
     </section>
@@ -108,7 +116,7 @@
             <option value="all">全部状态</option>
             <option value="new">还没学过</option>
             <option value="learning">正在学</option>
-            <option value="covered">已学满 3 遍</option>
+            <option value="covered">3 轮完成</option>
             <option value="mastered">很熟了</option>
             <option value="wrong">错词本</option>
           </select>
@@ -116,6 +124,27 @@
         <p class="muted small" id="words-count"></p>
         <div class="word-list" id="word-list"></div>
         <button class="btn btn-ghost" id="btn-more" hidden>加载更多</button>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------------ 单词本 -->
+    <section class="screen" data-screen="wordbook" id="screen-wordbook" hidden>
+      <div class="card">
+        <div class="wb-head">
+          <div>
+            <h2>⭐ 我的单词本</h2>
+            <p class="muted" id="wb-meta">把不熟悉的单词收进来。每次打开网页会先弹出单词本闯关，全部过关才能继续背新词。</p>
+          </div>
+          <span class="chip gold" id="wb-count">0 词</span>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary" id="btn-wb-gate">🚦 开始闯关</button>
+          <button class="btn btn-ghost" id="btn-wb-practice">练练单词本</button>
+          <button class="btn btn-ghost" id="btn-wb-print">打印单词本</button>
+          <button class="btn btn-danger" id="btn-wb-clear">清空单词本</button>
+        </div>
+        <p class="hint" id="wb-hint"></p>
+        <div class="word-list" id="wb-list"></div>
       </div>
     </section>
 
@@ -138,10 +167,12 @@
           </label>
           <label class="field check">音效 <input type="checkbox" id="set-sfx"></label>
           <label class="field check">朗读单词（用浏览器语音）<input type="checkbox" id="set-tts"></label>
+          <label class="field check">打开网页先过单词本关（未过关不能学习）<input type="checkbox" id="set-gate"></label>
           <div class="btn-row">
             <button class="btn btn-ghost" id="btn-export">导出进度</button>
             <button class="btn btn-ghost" id="btn-import">导入进度</button>
             <button class="btn btn-ghost" id="btn-print">打印错词本</button>
+            <button class="btn btn-ghost" id="btn-print-wb">打印单词本</button>
             <button class="btn btn-danger" id="btn-reset">清空进度</button>
           </div>
           <input type="file" id="file-import" accept="application/json" hidden>
@@ -155,9 +186,27 @@
     <button data-go="today" class="tab active"><span>🏠</span>今日</button>
     <button data-go="planets" class="tab"><span>🪐</span>星球</button>
     <button data-go="words" class="tab"><span>📚</span>单词库</button>
+    <button data-go="wordbook" class="tab"><span>⭐</span>单词本<i class="tab-badge" id="tab-wb-badge" hidden></i></button>
     <button data-go="report" class="tab"><span>📈</span>报告</button>
   </nav>
 
+</div>
+
+<!-- ⭐ 单词本闯关闸门（未过关不能继续学习） -->
+<div class="gate" id="gate" hidden>
+  <div class="gate-card">
+    <div class="gate-head">
+      <h2>📕 单词本闯关</h2>
+      <span class="chip gold" id="gate-progress">0 / 0</span>
+    </div>
+    <p class="muted" id="gate-sub">先把单词本里的词过关，才能继续今日探险！</p>
+    <div class="progress"><div class="progress-fg" id="gate-bar"></div></div>
+    <div class="gate-body" id="gate-body"></div>
+    <div class="gate-foot">
+      <button class="btn btn-primary btn-xl" id="gate-start">开始闯关 🚦</button>
+      <button class="btn btn-ghost small" id="gate-skip" hidden>家长跳过（不推荐）</button>
+    </div>
+  </div>
 </div>
 
 <div class="toast-wrap" id="toasts"></div>
@@ -168,7 +217,9 @@
 <script src="js/store.js"></script>
 <script src="js/srs.js"></script>
 <script src="js/speech.js"></script>
+<script src="js/grid.js"></script>
 <script src="js/exercises.js"></script>
+<script src="js/wordbook.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

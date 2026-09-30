@@ -7,9 +7,11 @@
   let srs = null;
   let exGen = null;
   let speech = window.speechManager;
+  let wordbookGate = null;
 
   // 会话运行状态
   let currentSession = null;
+  let currentTab = 'today';
 
   // DOM 元素引用
   const el = {};
@@ -44,6 +46,11 @@
     el.todayHint = $('today-hint');
     el.quests = $('quests');
     el.bars = $('bars');
+    el.practiceWbNum = $('practice-wb-num');
+    el.practiceTopic = $('practice-topic');
+    el.btnPracticeDictation = $('btn-practice-dictation');
+    el.btnPracticeDefinition = $('btn-practice-definition');
+    el.btnPracticeWordbook = $('btn-practice-wordbook');
 
     // 学习
     el.screenStudy = $('screen-study');
@@ -65,6 +72,17 @@
     el.wordList = $('word-list');
     el.btnMore = $('btn-more');
 
+    // 单词本
+    el.wbList = $('wb-list');
+    el.wbCount = $('wb-count');
+    el.wbMeta = $('wb-meta');
+    el.wbHint = $('wb-hint');
+    el.btnWbGate = $('btn-wb-gate');
+    el.btnWbPractice = $('btn-wb-practice');
+    el.btnWbPrint = $('btn-wb-print');
+    el.btnWbClear = $('btn-wb-clear');
+    el.tabWbBadge = $('tab-wb-badge');
+
     // 报告与设置
     el.reportStats = $('report-stats');
     el.hardWords = $('hard-words');
@@ -72,9 +90,11 @@
     el.setLimit = $('set-limit');
     el.setSfx = $('set-sfx');
     el.setTts = $('set-tts');
+    el.setGate = $('set-gate');
     el.btnExport = $('btn-export');
     el.btnImport = $('btn-import');
     el.btnPrint = $('btn-print');
+    el.btnPrintWb = $('btn-print-wb');
     el.btnReset = $('btn-reset');
     el.fileImport = $('file-import');
 
@@ -95,6 +115,7 @@
   }
 
   function switchTab(name) {
+    currentTab = name;
     document.querySelectorAll('.tab').forEach(b => {
       b.classList.toggle('active', b.dataset.go === name);
     });
@@ -109,15 +130,47 @@
     if (name === 'today') renderToday();
     if (name === 'planets') renderPlanets();
     if (name === 'words') renderWordList();
+    if (name === 'wordbook') renderWordbook();
     if (name === 'report') renderReport();
+  }
+
+  // 更新单词本角标
+  function updateWordbookBadge() {
+    const n = store.wordbookCount();
+    if (el.tabWbBadge) {
+      el.tabWbBadge.textContent = n > 99 ? '99+' : String(n);
+      if (n > 0) el.tabWbBadge.removeAttribute('hidden');
+      else el.tabWbBadge.setAttribute('hidden', '');
+    }
+    if (el.practiceWbNum) el.practiceWbNum.textContent = `(${n})`;
+  }
+
+  // 把单词加入 / 移出单词本，并同步所有 ⭐ 按钮的状态
+  function toggleWordbookWord(id, source) {
+    const added = store.toggleWordbook(id, source || 'manual');
+    updateWordbookBadge();
+    // 同步页面上所有该词的星标按钮
+    document.querySelectorAll(`[data-star="${id}"]`).forEach(b => {
+      b.classList.toggle('on', added);
+      const ico = b.querySelector('.star-ico');
+      const lbl = b.querySelector('.star-lbl');
+      if (ico) ico.textContent = added ? '⭐' : '☆';
+      else if (!lbl) b.textContent = added ? '⭐' : '☆';
+      if (lbl) lbl.textContent = added ? '已在单词本' : '收进单词本';
+      b.title = added ? '已收藏到单词本' : '加入单词本';
+    });
+    showToast(added ? `已加入单词本 ⭐（共 ${store.wordbookCount()} 词）` : '已从单词本移出');
+    if (currentTab === 'wordbook') renderWordbook();
+    return added;
   }
 
   // ------------------------------------------------------------- 今日界面
   function renderToday() {
+    updateWordbookBadge();
     const pacing = srs.getExamPacing();
+    const plan = srs.getRoundPlan();
     const today = window.todayStr();
     const log = store.getDailyLog(today);
-    const dueWords = srs.getDueReviewWords(today);
 
     // 顶栏芯片
     const lvl = store.getLevelInfo();
@@ -138,53 +191,84 @@
     const greet = hr < 12 ? '早上好！' : hr < 18 ? '下午好！' : '晚上好！';
     el.todayGreeting.textContent = `${greet} 今天的探险开始啦`;
 
-    const dailyTarget = pacing.targetNewPerDay + dueWords.length;
-    const completedToday = (log.newCount || 0) + (log.reviewCount || 0);
+    const allDone = plan.round > window.SRSEngine.ROUNDS;
+    const dailyTarget = plan.dailyTarget;
+    const completedToday = plan.doneToday;
 
-    el.todaySummary.textContent = `目标学习 ${dailyTarget} 词（新词 ${pacing.targetNewPerDay} · 需复习 ${dueWords.length}）`;
+    if (allDone) {
+      el.todaySummary.textContent = '3 轮全部完成！考前冲刺：刷错词和单词本 🏁';
+    } else {
+      el.todaySummary.textContent =
+        `第 ${plan.round} 轮 · ${plan.name}（${shortDate(plan.deadline)} 前过完）：今天过 ${dailyTarget} 词` +
+        (plan.behind ? ' · ⚠️ 进度落后，已自动加量' : '');
+    }
 
-    // 进度环
+    // 进度环：今天过了几个词
     el.ringNum.textContent = completedToday;
     el.ringSub.textContent = `/ ${dailyTarget}`;
     const circumference = 327; // 2 * PI * 52
-    const pct = Math.min(1, completedToday / Math.max(1, dailyTarget));
+    const pct = allDone ? 1 : Math.min(1, completedToday / Math.max(1, dailyTarget));
     el.ringFg.style.strokeDashoffset = circumference - circumference * pct;
 
     // 四格统计
-    el.sNew.textContent = log.newCount || 0;
-    el.sReview.textContent = log.reviewCount || 0;
+    el.sNew.textContent = completedToday;
+    el.sReview.textContent = plan.remaining;
     const acc = log.totalCount ? Math.round((log.correctCount / log.totalCount) * 100) : null;
     el.sAcc.textContent = acc !== null ? `${acc}%` : '—';
     el.sCovered.textContent = `${pacing.coveredPct}%`;
 
     // 开始按钮
-    if (completedToday >= dailyTarget && dailyTarget > 0) {
-      el.btnStart.textContent = '今日目标已完成！继续刷词 ⚡';
+    if (allDone) {
+      el.btnStart.textContent = '冲刺错词 ⚡';
+    } else if (completedToday >= dailyTarget && dailyTarget > 0) {
+      el.btnStart.textContent = '今日目标已完成！再过一组 ⚡';
     } else {
-      el.btnStart.textContent = `开始探险（还有 ${Math.max(0, dailyTarget - completedToday)} 词）`;
+      el.btnStart.textContent = `开始第 ${plan.round} 轮（今天还差 ${Math.max(0, dailyTarget - completedToday)} 词）`;
     }
-    el.todayHint.textContent = `目标在考试前学满 3 遍：已有 ${pacing.coveredCount} / ${pacing.totalWords} 词达标`;
+    el.todayHint.textContent = plan.schedule
+      .map((s, i) => `第${s.round}轮 ${plan.passedPerRound[i]}/${plan.total}`)
+      .join(' · ');
+
+    renderPracticeTopics();
 
     // 任务清单
-    renderQuests(log, pacing, dueWords);
+    renderQuests(log, plan);
 
     // 14 天柱状图
     render14Days();
   }
 
-  function renderQuests(log, pacing, dueWords) {
-    const q1Done = (log.newCount || 0) >= pacing.targetNewPerDay;
-    const q2Done = dueWords.length === 0;
+  function shortDate(dateStr) {
+    return dateStr ? `${Number(dateStr.slice(5, 7))}/${Number(dateStr.slice(8))}` : '';
+  }
+
+  // 今日页的主题下拉框：第一项保留原来的「今日词」行为
+  function renderPracticeTopics() {
+    if (!el.practiceTopic) return;
+    const current = el.practiceTopic.value;
+    const stats = srs.getTopicStats().sort((a, b) => b.total - a.total);
+    el.practiceTopic.innerHTML = `<option value="">今日词（不限主题）</option>` +
+      stats.map(s => `<option value="${s.topic}">${s.label}（${s.total}）</option>`).join('');
+    el.practiceTopic.value = current;
+  }
+
+  function renderQuests(log, plan) {
+    const allDone = plan.round > window.SRSEngine.ROUNDS;
+    const q1Done = allDone || plan.doneToday >= plan.dailyTarget;
+    const q2Done = allDone || plan.remaining === 0;
     const q3Done = (log.totalCount || 0) >= 30;
+    const roundText = allDone
+      ? '3 轮全部过完 🎉'
+      : `第 ${plan.round} 轮还剩 ${plan.remaining} 词（${shortDate(plan.deadline)} 截止）`;
 
     el.quests.innerHTML = `
       <li class="${q1Done ? 'done' : ''}">
         <span class="tick">${q1Done ? '✓' : '1'}</span>
-        <span class="q-text">完成今日新词 (${log.newCount || 0} / ${pacing.targetNewPerDay})</span>
+        <span class="q-text">今天过词 (${plan.doneToday} / ${plan.dailyTarget})</span>
       </li>
       <li class="${q2Done ? 'done' : ''}">
         <span class="tick">${q2Done ? '✓' : '2'}</span>
-        <span class="q-text">清空今日复习任务 (剩余 ${dueWords.length})</span>
+        <span class="q-text">${roundText}</span>
       </li>
       <li class="${q3Done ? 'done' : ''}">
         <span class="tick">${q3Done ? '✓' : '3'}</span>
@@ -227,19 +311,31 @@
   }
 
   // ------------------------------------------------------------- 学习会话
-  function startSession(customWords = null) {
+  const ROUND_BATCH = 15; // 每组过 15 个词，一组做完能喘口气
+
+  function startSession(customWords = null, mode = 'auto') {
     let wordQueue = [];
+    let round = 0;
 
     if (customWords && customWords.length) {
       wordQueue = customWords.slice();
     } else {
-      const due = srs.getDueReviewWords();
-      const pacing = srs.getExamPacing();
-      const news = srs.getCandidateNewWords(pacing.targetNewPerDay);
-
-      wordQueue = [...due, ...news];
+      const plan = srs.getRoundPlan();
+      if (plan.round <= window.SRSEngine.ROUNDS) {
+        // 3 轮过词：取本轮还没过的词
+        round = plan.round;
+        mode = 'round';
+        const left = plan.dailyTarget - plan.doneToday;
+        wordQueue = srs.getRoundQueue(round, left > 0 ? Math.min(ROUND_BATCH, left) : ROUND_BATCH);
+      } else {
+        // 3 轮都过完：冲刺错词 + 到期复习
+        const seen = {};
+        wordQueue = [...srs.getWrongWords(), ...srs.getDueReviewWords()]
+          .filter(w => !seen[w.id] && (seen[w.id] = true))
+          .slice(0, ROUND_BATCH * 2);
+      }
       if (wordQueue.length === 0) {
-        wordQueue = allWords.slice(0, 15);
+        wordQueue = allWords.slice(0, ROUND_BATCH);
       }
     }
 
@@ -251,7 +347,11 @@
       combo: 0,
       xpGained: 0,
       currentQuestion: null,
-      answered: false
+      answered: false,
+      mode: mode,
+      round: round,
+      passedInSession: 0,
+      grid: null
     };
 
     document.querySelectorAll('.screen').forEach(s => s.setAttribute('hidden', ''));
@@ -272,9 +372,12 @@
     const rec = store.getWordRecord(word.id);
     const box = rec ? rec.box : 0;
 
-    const q = exGen.createQuestion(word, box);
+    const q = currentSession.mode === 'round'
+      ? exGen.createRoundQuestion(word, currentSession.round)
+      : exGen.createQuestion(word, box, currentSession.mode || 'auto');
     currentSession.currentQuestion = q;
     currentSession.answered = false;
+    currentSession.grid = null;
 
     const pct = ((currentSession.currentIndex) / currentSession.total) * 100;
     el.sessionBar.style.width = `${pct}%`;
@@ -338,18 +441,30 @@
           `).join('')}
         </div>
       `;
-    } else if (q.type === 'spelling') {
-      const hint = q.targetWord.replace(/[a-zA-Z]/g, '_ ');
-      html += `
-        <div class="q-prompt">
-          <div class="q-zh">${q.promptZh}</div>
-          ${q.promptIpa ? `<div class="q-ipa">/${q.promptIpa}/</div>` : ''}
-          ${q.promptPos ? `<div class="q-pos">${q.promptPos}</div>` : ''}
-        </div>
-        <div class="spell-hint" id="spell-hint">${hint}</div>
-        <div class="answer-row">
-          <input type="text" class="type-input" id="type-input" autofocus autocomplete="off" spellcheck="false" placeholder="输入拼写…">
-          <button class="btn btn-primary" id="btn-submit-type">确认</button>
+    } else if (q.gridMode) {
+      let prompt = '';
+      if (q.type === 'dictation') {
+        prompt = `
+          <div class="q-prompt">
+            <button class="btn btn-ghost" id="btn-replay">🔊 听发音</button>
+            <div class="q-pos">🎧 听发音，在五线格里拼出这个单词</div>
+          </div>
+        `;
+      } else {
+        prompt = `
+          <div class="q-prompt">
+            <div class="q-zh">${q.promptZh || ''}</div>
+            ${q.promptPos ? `<div class="q-pos">${q.promptPos}</div>` : ''}
+            ${q.type === 'spelling' && q.promptIpa ? `<div class="q-ipa">/${q.promptIpa}/</div>` : ''}
+            ${q.example ? `<div class="q-sentence">${q.example}</div>` : ''}
+          </div>
+        `;
+      }
+      html += `${prompt}
+        <div class="grid-hint">${window.gridHint(q.targetWord)}</div>
+        <div id="grid-mount"></div>
+        <div class="btn-row" style="justify-content:center;">
+          <button class="btn btn-primary btn-xl" id="btn-submit-type">确认（Enter）</button>
         </div>
       `;
     }
@@ -363,14 +478,19 @@
       });
       const replay = el.studyCard.querySelector('#btn-replay');
       if (replay) replay.addEventListener('click', () => speech.speak(q.word.word));
-    } else if (q.type === 'spelling') {
-      const input = el.studyCard.querySelector('#type-input');
-      const submit = el.studyCard.querySelector('#btn-submit-type');
-      submit.addEventListener('click', () => handleSpellingAnswer(input.value));
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') handleSpellingAnswer(input.value);
+    } else if (q.gridMode) {
+      const mount = el.studyCard.querySelector('#grid-mount');
+      const grid = new window.RuledGrid({
+        mount: mount,
+        target: q.targetWord,
+        onSubmit: (val) => handleSpellingAnswer(val)
       });
-      setTimeout(() => input.focus(), 80);
+      currentSession.grid = grid;
+      const submit = el.studyCard.querySelector('#btn-submit-type');
+      if (submit) submit.addEventListener('click', () => grid.submit());
+      const replay = el.studyCard.querySelector('#btn-replay');
+      if (replay) replay.addEventListener('click', () => speech.speak(q.word.word));
+      setTimeout(() => grid.focus(), 120);
     }
   }
 
@@ -383,17 +503,16 @@
   }
 
   function handleSpellingAnswer(val) {
-    if (currentSession.answered) return;
+    if (!currentSession || currentSession.answered) return;
     currentSession.answered = true;
 
-    const input = el.studyCard.querySelector('#type-input');
-    const target = currentSession.currentQuestion.targetWord;
-    const isCorrect = val.trim().toLowerCase() === target;
+    const q = currentSession.currentQuestion;
+    const isCorrect = window.normalizeSpelling(val) === window.normalizeSpelling(q.targetWord);
 
-    if (input) {
-      input.disabled = true;
-      input.classList.add(isCorrect ? 'correct' : 'wrong');
-    }
+    if (currentSession.grid) currentSession.grid.lock(true);
+    const submit = el.studyCard.querySelector('#btn-submit-type');
+    if (submit) submit.disabled = true;
+
     applyAnswerResult(isCorrect, null);
   }
 
@@ -412,6 +531,9 @@
 
       const { isNew } = srs.updateWordState(word.id, true, 4);
       store.recordAnswer({ wordId: word.id, isCorrect: true, isNew, xpEarned });
+      if (srs.recordPass(word.id, window.ExerciseGenerator.levelOf(q.type))) {
+        currentSession.passedInSession += 1;
+      }
 
       showFeedback(true, word);
     } else {
@@ -438,14 +560,27 @@
     const fb = el.studyCard.querySelector('#card-feedback');
     if (!fb) return;
 
+    const inWb = store.isInWordbook(word.id);
+    const sentence = exGen.buildHighlightedExample(word);
     fb.className = `feedback ${isCorrect ? 'ok' : 'no'}`;
     fb.innerHTML = `
       <div class="fb-text">
         <b>${isCorrect ? '🎉 太棒了！回答正确' : '💪 记一下：' + word.word}</b>
         <div class="fb-sub">${word.zh} · /${word.ipa || ''}/</div>
+        ${sentence ? `<div class="fb-sent">${sentence}</div>` : ''}
       </div>
-      <button class="btn btn-primary" id="btn-next">下一步 (Enter)</button>
+      <div class="fb-actions">
+        <button class="btn btn-ghost small star-btn ${inWb ? 'on' : ''}" id="fb-star" data-star="${word.id}">
+          <span class="star-ico">${inWb ? '⭐' : '☆'}</span> <span class="star-lbl">${inWb ? '已在单词本' : '收进单词本'}</span>
+        </button>
+        <button class="btn btn-primary" id="btn-next">下一步 (Enter)</button>
+      </div>
     `;
+
+    const star = fb.querySelector('#fb-star');
+    if (star) {
+      star.addEventListener('click', () => toggleWordbookWord(word.id, 'feedback'));
+    }
 
     const nextBtn = fb.querySelector('#btn-next');
     nextBtn.focus();
@@ -468,21 +603,35 @@
     if (acc < 70) star = '⭐';
     else if (acc < 90) star = '⭐⭐';
 
+    // 3 轮过词：还有没过的词就给「再来一组」
+    const isRound = currentSession.mode === 'round';
+    const plan = isRound ? srs.getRoundPlan() : null;
+    const canContinue = isRound && plan.round <= window.SRSEngine.ROUNDS && plan.remaining > 0;
+    const roundLine = isRound
+      ? `<p class="muted">这组过了 ${currentSession.passedInSession} 个词 · 今天 ${plan.doneToday} / ${plan.dailyTarget}${plan.round <= window.SRSEngine.ROUNDS ? ` · 第 ${plan.round} 轮还剩 ${plan.remaining} 词` : ' · 3 轮全部过完！'}</p>`
+      : '';
+
     el.studyCard.innerHTML = `
       <div class="results">
         <div class="big">🚀</div>
         <div class="stars">${star}</div>
         <h2>太棒了！探险完成</h2>
+        ${roundLine}
         <div class="row">
           <div><b>${correct}</b><span>答对题数</span></div>
           <div><b>${acc}%</b><span>正确率</span></div>
           <div><b>+${currentSession.xpGained}</b><span>获得 XP</span></div>
         </div>
-        <button class="btn btn-primary btn-xl" id="btn-finish-session">返回星球基地</button>
+        <div class="btn-row" style="justify-content:center;">
+          ${canContinue ? '<button class="btn btn-primary btn-xl" id="btn-next-batch">再来一组 ⚡</button>' : ''}
+          <button class="btn ${canContinue ? 'btn-ghost' : 'btn-primary btn-xl'}" id="btn-finish-session">返回星球基地</button>
+        </div>
       </div>
     `;
 
     el.studyCard.querySelector('#btn-finish-session').addEventListener('click', exitSession);
+    const nextBatch = el.studyCard.querySelector('#btn-next-batch');
+    if (nextBatch) nextBatch.addEventListener('click', () => startSession());
   }
 
   function exitSession() {
@@ -504,10 +653,10 @@
       return `
         <div class="unit ${isDone ? 'done' : ''}" data-topic="${s.topic}">
           <div class="planet">${icon}</div>
-          <div class="u-name">${s.topic}</div>
+          <div class="u-name">${s.label}</div>
           <div class="u-bar"><i style="width: ${pct}%"></i></div>
           <div class="u-meta">
-            <span>3遍覆盖 ${s.covered}/${s.total}</span>
+            <span>3 轮完成 ${s.covered}/${s.total}</span>
             <span>${pct}%</span>
           </div>
         </div>
@@ -516,9 +665,7 @@
 
     el.units.querySelectorAll('.unit').forEach(u => {
       u.addEventListener('click', () => {
-        const topic = u.dataset.topic;
-        const topicWords = allWords.filter(w => (w.topics || []).includes(topic));
-        startSession(topicWords);
+        startSession(srs.wordsForTopic(u.dataset.topic));
       });
     });
   }
@@ -549,12 +696,13 @@
       if (topic && !(w.topics || []).includes(topic)) return false;
 
       const rec = store.getWordRecord(w.id);
+      const passes = window.SRSEngine.passesOf(rec);
       if (stateFilter === 'new') {
         if (rec && rec.reps > 0) return false;
       } else if (stateFilter === 'learning') {
-        if (!rec || rec.reps === 0 || rec.reps >= 3) return false;
+        if (!rec || rec.reps === 0 || passes >= 3) return false;
       } else if (stateFilter === 'covered') {
-        if (!rec || rec.reps < 3) return false;
+        if (passes < 3) return false;
       } else if (stateFilter === 'mastered') {
         if (!rec || rec.box < 4) return false;
       } else if (stateFilter === 'wrong') {
@@ -571,14 +719,16 @@
       let stateTag = '未学';
       let stateClass = 's0';
       if (rec && rec.reps > 0) {
-        if (rec.reps >= 3) {
-          stateTag = `已学${rec.reps}遍 · Box${rec.box}`;
+        const passes = window.SRSEngine.passesOf(rec);
+        if (passes >= 3) {
+          stateTag = `3 轮完成 · Box${rec.box}`;
           stateClass = 's3';
         } else {
-          stateTag = `已学${rec.reps}遍`;
+          stateTag = passes ? `已过 ${passes} 轮` : '学习中';
           stateClass = 's1';
         }
       }
+      const inWb = store.isInWordbook(w.id);
       return `
         <div class="word-row" data-id="${w.id}">
           <button class="icon-btn btn-speak" data-word="${w.word}" title="发音">🔊</button>
@@ -587,6 +737,7 @@
             <div class="w-zh">${w.zh}</div>
           </div>
           <span class="w-state ${stateClass}">${stateTag}</span>
+          <button class="icon-btn star-btn ${inWb ? 'on' : ''}" data-star="${w.id}" title="${inWb ? '已收藏到单词本' : '加入单词本'}">${inWb ? '⭐' : '☆'}</button>
         </div>
       `;
     }).join('');
@@ -597,6 +748,13 @@
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         speech.speak(btn.dataset.word);
+      });
+    });
+
+    el.wordList.querySelectorAll('.star-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleWordbookWord(btn.dataset.star, 'word-list');
       });
     });
 
@@ -611,6 +769,7 @@
 
   function showWordModal(w) {
     const rec = store.getWordRecord(w.id);
+    const inWb = store.isInWordbook(w.id);
     el.overlay.innerHTML = `
       <div class="modal">
         <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -619,14 +778,18 @@
         </div>
         <p class="muted">${w.pos || ''} · /${w.ipa || ''}/</p>
         <p style="font-size:1.2rem; margin: .8rem 0;">${w.zh}</p>
-        ${w.example ? `<p class="q-example" style="margin:.8rem 0;">${w.example}</p>` : ''}
+        ${w.sent ? `<p class="q-example" style="margin:.8rem 0;">${exGen.buildHighlightedExample(w) || w.sent}</p>` : ''}
         <div style="margin-top:1rem; font-size:.85rem; color:var(--muted);">
-          主题：${(w.topics || []).join(', ') || '通用'}<br>
-          学习次数：${rec ? rec.reps : 0} 次 · 错题：${rec ? rec.lapses : 0} 次 · 当前 Box：${rec ? rec.box : 0}
+          主题：${(w.topics || []).join(', ') || '未分类'}<br>
+          已过 ${window.SRSEngine.passesOf(rec)} / 3 轮 · 学习次数：${rec ? rec.reps : 0} 次 · 错题：${rec ? rec.lapses : 0} 次 · 当前 Box：${rec ? rec.box : 0}
         </div>
         <div class="btn-row" style="margin-top:1.2rem;">
           <button class="btn btn-primary" id="modal-speak">🔊 朗读</button>
+          <button class="btn btn-ghost" id="modal-dictation">✍️ 听写这个词</button>
           <button class="btn btn-ghost" id="modal-practice">单挑练习这个词</button>
+          <button class="btn btn-ghost star-btn ${inWb ? 'on' : ''}" id="modal-star" data-star="${w.id}">
+            <span class="star-ico">${inWb ? '⭐' : '☆'}</span> <span class="star-lbl">${inWb ? '已在单词本' : '收进单词本'}</span>
+          </button>
         </div>
       </div>
     `;
@@ -634,10 +797,107 @@
 
     el.overlay.querySelector('#modal-close').addEventListener('click', () => el.overlay.setAttribute('hidden', ''));
     el.overlay.querySelector('#modal-speak').addEventListener('click', () => speech.speak(w.word));
+    el.overlay.querySelector('#modal-star').addEventListener('click', () => toggleWordbookWord(w.id, 'modal'));
+    el.overlay.querySelector('#modal-dictation').addEventListener('click', () => {
+      el.overlay.setAttribute('hidden', '');
+      startSession([w], 'dictation');
+    });
     el.overlay.querySelector('#modal-practice').addEventListener('click', () => {
       el.overlay.setAttribute('hidden', '');
       startSession([w]);
     });
+  }
+
+  // ------------------------------------------------------------- ⭐ 单词本
+  function renderWordbook() {
+    updateWordbookBadge();
+
+    const entries = store.getWordbookEntries();
+    const words = entries.map(e => allWords.find(w => w.id === e.id)).filter(Boolean);
+    const today = window.todayStr();
+    const passedToday = entries.filter(e => e.entry.lastPassed === today).length;
+
+    el.wbCount.textContent = `${words.length} 词`;
+    el.wbHint.textContent = words.length
+      ? `今天已过关 ${passedToday} 个 · 下次打开网页会自动弹出闯关`
+      : '';
+    el.btnWbGate.disabled = words.length === 0;
+    el.btnWbPractice.disabled = words.length === 0;
+    el.btnWbPrint.disabled = words.length === 0;
+    el.btnWbClear.disabled = words.length === 0;
+
+    if (!words.length) {
+      el.wbList.innerHTML = `<p class="muted">单词本还是空的。在「单词库」或答题反馈里点 ☆，把不熟的词收进来吧！</p>`;
+      return;
+    }
+
+    el.wbList.innerHTML = words.map(w => {
+      const e = store.getWordbookEntry(w.id);
+      const done = e && e.lastPassed === today;
+      return `
+        <div class="word-row" data-id="${w.id}">
+          <button class="icon-btn btn-speak" data-word="${w.word}" title="发音">🔊</button>
+          <div class="w-main">
+            <div class="w-en">${w.word} <span class="w-pos">${w.pos || ''}</span></div>
+            <div class="w-zh">${w.zh}</div>
+          </div>
+          <span class="w-state ${done ? 's3' : 's1'}">${done ? '今日已过关' : '待过关'}</span>
+          <button class="icon-btn star-btn on" data-star="${w.id}" title="移出单词本">⭐</button>
+        </div>
+      `;
+    }).join('');
+
+    el.wbList.querySelectorAll('.btn-speak').forEach(btn => {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        speech.speak(btn.dataset.word);
+      });
+    });
+
+    el.wbList.querySelectorAll('.star-btn').forEach(btn => {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        toggleWordbookWord(btn.dataset.star, 'wordbook');
+      });
+    });
+
+    el.wbList.querySelectorAll('.word-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const w = allWords.find(x => x.id === row.dataset.id);
+        if (w) showWordModal(w);
+      });
+    });
+  }
+
+  // 专项练习：只用某一类题型刷今天的词；听写可按主题出题
+  function practiceMode(mode, limit = 15) {
+    const topic = mode === 'dictation' && el.practiceTopic ? el.practiceTopic.value : '';
+    if (topic) {
+      const queue = srs.getTopicPracticeQueue(topic, limit);
+      const opt = el.practiceTopic.selectedOptions[0];
+      const name = opt ? opt.textContent.replace(/（\d+）$/, '') : topic;
+      if (!queue.length) {
+        showToast('这个主题里还没有单词哦');
+        return;
+      }
+      showToast(`✍️ 听音拼写 · ${name}，共 ${queue.length} 词`);
+      startSession(queue, mode);
+      return;
+    }
+    const due = srs.getDueReviewWords();
+    const news = srs.getCandidateNewWords(limit);
+    let queue = [];
+    const seen = {};
+    [...due, ...news].forEach(w => {
+      if (queue.length >= limit) return;
+      if (seen[w.id]) return;
+      seen[w.id] = true;
+      queue.push(w);
+    });
+    if (!queue.length) queue = allWords.slice(0, limit);
+    const label = mode === 'dictation' ? '听音拼写' : '看释义猜词';
+    showToast(`✍️ ${label}开始，共 ${queue.length} 词`);
+    startSession(queue, mode);
   }
 
   // ------------------------------------------------------------- 报告与设置
@@ -649,6 +909,7 @@
       <div class="stat"><b>${pacing.coveredCount}</b><span>已完成3遍</span></div>
       <div class="stat"><b>${pacing.underCovered}</b><span>待满3遍</span></div>
       <div class="stat"><b>${wrong.length}</b><span>当前错词</span></div>
+      <div class="stat"><b>${store.wordbookCount()}</b><span>⭐ 单词本</span></div>
       <div class="stat"><b>${store.data.xp}</b><span>累计 XP</span></div>
     `;
 
@@ -678,6 +939,34 @@
     el.setLimit.value = store.data.dailyLimit || 0;
     el.setSfx.checked = store.data.soundEnabled !== false;
     el.setTts.checked = store.data.ttsEnabled !== false;
+    el.setGate.checked = store.data.wordbookGateEnabled !== false;
+  }
+
+  // 打印单词列表（错词本 / 单词本共用）
+  function printWords(title, words) {
+    if (!words.length) {
+      alert('这个列表里还没有单词哦！');
+      return;
+    }
+    const printWin = window.open('', '_blank');
+    printWin.document.write(`
+      <html><head><title>${title} - 打印</title>
+      <style>body { font-family: sans-serif; padding: 20px; } table { width:100%; border-collapse:collapse; } th, td { border:1px solid #ccc; padding:8px; text-align:left; }</style>
+      </head><body>
+      <h2>${title}（${words.length} 词）</h2>
+      <table><tr><th>#</th><th>英文</th><th>音标/词性</th><th>中文释义</th><th>默写核对</th></tr>
+      ${words.map((w, idx) => '<tr><td>' + (idx + 1) + '</td><td><b>' + w.word + '</b></td><td>/' + (w.ipa || '') + '/ ' + (w.pos || '') + '</td><td>' + (w.zh || '') + '</td><td></td></tr>').join('')}
+      </table>
+      <script>window.print();</script>
+      </body></html>
+    `);
+    printWin.document.close();
+  }
+
+  function wordbookWords() {
+    return store.getWordbookEntries()
+      .map(e => allWords.find(w => w.id === e.id))
+      .filter(Boolean);
   }
 
   // ------------------------------------------------------------- 全局事件绑定
@@ -695,6 +984,18 @@
     });
 
     el.btnStart.addEventListener('click', () => startSession());
+
+    // 专项练习入口（五线格听写 / 看释义猜词 / 单词本闯关）
+    el.btnPracticeDictation.addEventListener('click', () => practiceMode('dictation'));
+    el.btnPracticeDefinition.addEventListener('click', () => practiceMode('definition'));
+    el.btnPracticeWordbook.addEventListener('click', () => {
+      if (!store.wordbookCount()) {
+        showToast('单词本还是空的，先收藏几个不熟的词吧 ☆');
+        switchTab('wordbook');
+        return;
+      }
+      wordbookGate.open();
+    });
 
     el.btnQuit.addEventListener('click', () => {
       if (confirm('确定要暂停这次练习吗？已答进度已自动保存。')) {
@@ -731,6 +1032,39 @@
       speech.ttsEnabled = el.setTts.checked;
       store.save();
     });
+    el.setGate.addEventListener('change', () => {
+      store.data.wordbookGateEnabled = el.setGate.checked;
+      store.save();
+      showToast(el.setGate.checked ? '已开启：打开网页先过单词本关' : '已关闭：不再强制单词本闯关');
+    });
+
+    // ---------------------------------------------------------- 单词本按钮
+    el.btnWbGate.addEventListener('click', () => {
+      if (!store.wordbookCount()) {
+        showToast('单词本还是空的哦 ☆');
+        return;
+      }
+      wordbookGate.open();
+    });
+    el.btnWbPractice.addEventListener('click', () => {
+      const queue = wordbookWords().slice(0, 20);
+      if (!queue.length) {
+        showToast('单词本还是空的哦 ☆');
+        return;
+      }
+      startSession(queue, 'definition');
+    });
+    el.btnWbPrint.addEventListener('click', () => printWords('我的 KET 单词本', wordbookWords()));
+    el.btnWbClear.addEventListener('click', () => {
+      if (!store.wordbookCount()) return;
+      if (confirm(`确定要清空单词本里的 ${store.wordbookCount()} 个词吗？`)) {
+        store.data.wordbook = {};
+        store.save();
+        updateWordbookBadge();
+        renderWordbook();
+        showToast('单词本已清空');
+      }
+    });
 
     el.btnExport.addEventListener('click', () => {
       const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(store.exportJSON());
@@ -749,6 +1083,8 @@
         try {
           store.importJSON(evt.target.result);
           showToast('进度导入成功！🎉');
+          updateWordbookBadge();
+          if (currentTab === 'wordbook') renderWordbook();
           renderToday();
         } catch (err) {
           alert('导入失败：' + err.message);
@@ -758,48 +1094,41 @@
     });
 
     el.btnPrint.addEventListener('click', () => {
-      const wrong = srs.getWrongWords();
-      if (!wrong.length) {
-        alert('当前没有错词需要打印！');
-        return;
-      }
-      const printWin = window.open('', '_blank');
-      printWin.document.write(`
-        <html><head><title>KET 错词本 - 打印</title>
-        <style>body { font-family: sans-serif; padding: 20px; } table { width:100%; border-collapse:collapse; } th, td { border:1px solid #ccc; padding:8px; text-align:left; }</style>
-        </head><body>
-        <h2>KET 错词专项默写本 (${wrong.length} 词)</h2>
-        <table><tr><th>#</th><th>英文</th><th>音标/词性</th><th>中文释义</th><th>默写核对</th></tr>
-        ${wrong.map((w, idx) => '<tr><td>' + (idx+1) + '</td><td><b>' + w.word + '</b></td><td>/' + (w.ipa || '') + '/ ' + (w.pos || '') + '</td><td>' + w.zh + '</td><td></td></tr>').join('')}
-        </table>
-        <script>window.print();</script>
-        </body></html>
-      `);
-      printWin.document.close();
+      printWords('KET 错词专项默写本', srs.getWrongWords());
+    });
+    el.btnPrintWb.addEventListener('click', () => {
+      printWords('我的 KET 单词本', wordbookWords());
     });
 
     el.btnReset.addEventListener('click', () => {
-      if (confirm('确定要清空所有学习记录吗？此操作无法撤销！')) {
+      if (confirm('确定要清空所有学习记录吗？此操作无法撤销！（单词本也会一起清空）')) {
         store.reset();
+        updateWordbookBadge();
+        if (currentTab === 'wordbook') renderWordbook();
         showToast('进度已重置');
         renderToday();
       }
     });
 
     window.addEventListener('keydown', (e) => {
+      // 单词本闸门打开时，后面的学习界面不响应任何快捷键
+      if (wordbookGate && wordbookGate.isOpen()) return;
       if (!currentSession || el.screenStudy.hasAttribute('hidden')) return;
+      // 五线格有自己的 Enter 处理
+      if (e.target && e.target.classList && e.target.classList.contains('grid-input')) return;
 
       const fb = el.studyCard.querySelector('#card-feedback');
-      if (fb && e.key === 'Enter') {
+      // 只有已经答题（反馈区已展示）时 Enter 才进入下一题
+      if (fb && fb.classList.contains('feedback') && e.key === 'Enter') {
         e.preventDefault();
         advanceToNext();
         return;
       }
 
-      if (['1', '2', '3', '4'].includes(e.key)) {
+      if (!currentSession.answered && ['1', '2', '3', '4'].includes(e.key)) {
         const idx = parseInt(e.key, 10) - 1;
         const opts = el.studyCard.querySelectorAll('.opt');
-        if (opts[idx] && !currentSession.answered) {
+        if (opts[idx]) {
           opts[idx].click();
         }
       }
@@ -830,12 +1159,29 @@
     speech.ttsEnabled = store.data.ttsEnabled !== false;
     el.btnSound.textContent = speech.soundEnabled ? '🔊' : '🔇';
 
+    // ⭐ 单词本闯关闸门
+    wordbookGate = new window.WordbookGate({
+      store: store,
+      srs: srs,
+      exGen: exGen,
+      speech: speech,
+      allWords: allWords
+    });
+    wordbookGate.onFinished = () => {
+      updateWordbookBadge();
+      renderToday();
+      if (currentTab === 'wordbook') renderWordbook();
+      if (currentTab === 'report') renderReport();
+    };
+
     bindGlobalEvents();
 
     setTimeout(() => {
       el.boot.setAttribute('hidden', '');
       el.app.removeAttribute('hidden');
       switchTab('today');
+      // 打开网页先弹出单词本闯关（单词本为空或已关闭该设置则跳过）
+      wordbookGate.maybeAutoOpen();
     }, 400);
   }
 
