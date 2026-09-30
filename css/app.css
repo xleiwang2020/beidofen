@@ -266,6 +266,8 @@ main { padding: clamp(.8rem, 2.5vw, 1.5rem) clamp(.8rem, 3vw, 2rem) 100px; max-w
 .word-row .w-main { flex: 1; min-width: 0; }
 .word-row .w-en { font-weight: 700; font-size: 1.02rem; }
 .word-row .w-zh { color: var(--muted); font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.word-row .w-sent { margin-top: .2rem; font-size: .9rem; line-height: 1.45; color: #c3cff0; }
+.word-row .w-sent mark { background: rgba(255, 200, 87, .18); color: var(--gold); border-radius: 4px; padding: 0 .12rem; }
 .word-row .w-pos { color: var(--primary-2); font-size: .76rem; }
 .word-row .w-state { font-size: .72rem; padding: .2rem .5rem; border-radius: 999px; border: 1px solid var(--card-line); color: var(--muted); white-space: nowrap; }
 .word-row .w-state.s0 { color: #ffb0b0; border-color: rgba(255, 107, 107, .4); }

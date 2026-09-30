@@ -70,7 +70,6 @@
     el.filterState = $('filter-state');
     el.wordsCount = $('words-count');
     el.wordList = $('word-list');
-    el.btnMore = $('btn-more');
 
     // 单词本
     el.wbList = $('wb-list');
@@ -671,11 +670,8 @@
   }
 
   // ------------------------------------------------------------- 单词库
-  let wordListLimit = 50;
-
-  function renderWordList(resetLimit = true) {
-    if (resetLimit) wordListLimit = 50;
-
+  // 单词库一次列出全部单词，每行直接带例句
+  function renderWordList() {
     if (!el.filterTopic.options.length) {
       const topics = new Set();
       allWords.forEach(w => (w.topics || []).forEach(t => topics.add(t)));
@@ -711,10 +707,9 @@
       return true;
     });
 
-    el.wordsCount.textContent = `共找到 ${filtered.length} 个单词（已显示前 ${Math.min(wordListLimit, filtered.length)} 个）`;
+    el.wordsCount.textContent = `共找到 ${filtered.length} 个单词`;
 
-    const visible = filtered.slice(0, wordListLimit);
-    el.wordList.innerHTML = visible.map(w => {
+    el.wordList.innerHTML = filtered.map(w => {
       const rec = store.getWordRecord(w.id);
       let stateTag = '未学';
       let stateClass = 's0';
@@ -729,42 +724,20 @@
         }
       }
       const inWb = store.isInWordbook(w.id);
+      const sentence = exGen.buildHighlightedExample(w);
       return `
         <div class="word-row" data-id="${w.id}">
           <button class="icon-btn btn-speak" data-word="${w.word}" title="发音">🔊</button>
           <div class="w-main">
             <div class="w-en">${w.word} <span class="w-pos">${w.pos || ''}</span></div>
             <div class="w-zh">${w.zh}</div>
+            ${sentence ? `<div class="w-sent">${sentence}</div>` : ''}
           </div>
           <span class="w-state ${stateClass}">${stateTag}</span>
           <button class="icon-btn star-btn ${inWb ? 'on' : ''}" data-star="${w.id}" title="${inWb ? '已收藏到单词本' : '加入单词本'}">${inWb ? '⭐' : '☆'}</button>
         </div>
       `;
     }).join('');
-
-    el.btnMore.hidden = visible.length >= filtered.length;
-
-    el.wordList.querySelectorAll('.btn-speak').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        speech.speak(btn.dataset.word);
-      });
-    });
-
-    el.wordList.querySelectorAll('.star-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        toggleWordbookWord(btn.dataset.star, 'word-list');
-      });
-    });
-
-    el.wordList.querySelectorAll('.word-row').forEach(row => {
-      row.addEventListener('click', () => {
-        const id = row.dataset.id;
-        const w = allWords.find(x => x.id === id);
-        if (w) showWordModal(w);
-      });
-    });
   }
 
   function showWordModal(w) {
@@ -1003,12 +976,27 @@
       }
     });
 
-    el.search.addEventListener('input', () => renderWordList(true));
-    el.filterTopic.addEventListener('change', () => renderWordList(true));
-    el.filterState.addEventListener('change', () => renderWordList(true));
-    el.btnMore.addEventListener('click', () => {
-      wordListLimit += 50;
-      renderWordList(false);
+    el.search.addEventListener('input', () => renderWordList());
+    el.filterTopic.addEventListener('change', () => renderWordList());
+    el.filterState.addEventListener('change', () => renderWordList());
+
+    // 单词库一次渲染上千行，用事件委托代替逐行绑定
+    el.wordList.addEventListener('click', (e) => {
+      const speak = e.target.closest('.btn-speak');
+      if (speak) {
+        speech.speak(speak.dataset.word);
+        return;
+      }
+      const star = e.target.closest('.star-btn');
+      if (star) {
+        toggleWordbookWord(star.dataset.star, 'word-list');
+        return;
+      }
+      const row = e.target.closest('.word-row');
+      if (row) {
+        const w = allWords.find(x => x.id === row.dataset.id);
+        if (w) showWordModal(w);
+      }
     });
 
     el.setExam.addEventListener('change', () => {
